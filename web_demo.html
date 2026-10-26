@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="author" content="军哥懂保">
+<title>鼠标画笔 · 网页演示版</title>
+<style>
+:root{
+  --gold:#E8C87A; --gold-2:#F5E0A8; --gold-line:rgba(232,200,122,.18);
+  --cyan:#4FD1C5; --ink:#0A0B0F; --card:rgba(17,19,25,.9);
+  --text:#EDEDF0; --sub:#8B909B; --dim:#6E7480;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--ink);
+  font-family:"Microsoft YaHei","PingFang SC","Helvetica Neue",system-ui,sans-serif;
+  color:var(--text);-webkit-user-select:none;user-select:none}
+body::before{content:"";position:fixed;inset:0;z-index:0;
+  background:
+    radial-gradient(900px 620px at 16% 10%,rgba(232,200,122,.10),transparent 62%),
+    radial-gradient(820px 620px at 86% 92%,rgba(79,209,197,.09),transparent 62%),
+    linear-gradient(158deg,#0A0B0F 0%,#10131B 52%,#090A0E 100%)}
+body::after{content:"";position:fixed;inset:0;z-index:1;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);
+  background-size:46px 46px}
+canvas#board{position:fixed;inset:0;z-index:2;touch-action:none;cursor:crosshair;display:block}
+
+/* 品牌标识 */
+.brand{position:fixed;left:22px;top:20px;z-index:6;display:flex;align-items:center;gap:10px;
+  padding:9px 16px 9px 12px;border-radius:14px;background:var(--card);
+  border:1px solid var(--gold-line);backdrop-filter:blur(14px);
+  box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.brand-dot{width:10px;height:10px;border-radius:50%;background:var(--gold);
+  box-shadow:0 0 14px rgba(232,200,122,.85)}
+.brand-title{font-size:15px;font-weight:700;letter-spacing:1px;color:#F4E7C6;line-height:1.25}
+.brand-sub{font-size:9px;color:var(--dim);letter-spacing:.5px}
+
+/* 控制面板 */
+.panel{position:fixed;right:22px;top:20px;z-index:7;width:262px;padding:14px 14px 12px;
+  border-radius:18px;background:linear-gradient(150deg,rgba(22,24,31,.96),rgba(9,10,14,.98));
+  border:1px solid var(--gold-line);backdrop-filter:blur(16px);
+  box-shadow:0 22px 60px rgba(0,0,0,.6),inset 0 1px 0 rgba(232,200,122,.16)}
+.p-head{display:flex;align-items:center;gap:8px;margin-bottom:11px}
+.p-title{font-size:11px;font-weight:700;letter-spacing:2px;color:#F0E3C2}
+.p-mode{font-size:9px;font-weight:700;color:#13151B;background:var(--gold);
+  border-radius:9px;padding:3px 9px;letter-spacing:.5px}
+.icon-btn{margin-left:auto;width:22px;height:22px;border-radius:11px;cursor:pointer;
+  background:rgba(232,200,122,.13);border:1px solid rgba(232,200,122,.45);color:var(--gold);
+  font-size:11px;font-weight:700;line-height:1}
+.icon-btn:hover{background:rgba(232,200,122,.26)}
+.fold{width:20px;height:20px;border-radius:50%;border:none;background:transparent;
+  color:#7D828E;font-size:13px;cursor:pointer;line-height:1}
+.fold:hover{color:var(--gold)}
+.p-body{overflow:hidden;transition:max-height .28s ease,opacity .2s}
+.panel.collapsed .p-body{max-height:0;opacity:0;pointer-events:none}
+
+.tools{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-bottom:10px}
+.tool{height:46px;border-radius:11px;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:2px;color:#D5D9E1;
+  background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06);
+  transition:.16s}
+.tool svg{width:19px;height:19px}
+.tool span{font-size:8px;color:#7E8490;letter-spacing:.5px}
+.tool:hover{background:rgba(232,200,122,.10);border-color:rgba(232,200,122,.36)}
+.tool.active{background:linear-gradient(135deg,var(--gold-2),#D6AE56);
+  border-color:#F7E8BE;color:#171A21}
+.tool.active span{color:#3A2F17}
+
+.row{display:flex;align-items:center;gap:8px;margin:9px 0}
+.label{font-size:9px;letter-spacing:2px;color:var(--dim);white-space:nowrap}
+.colors{display:flex;gap:6px;flex:1;justify-content:flex-end}
+.sw{width:18px;height:18px;border-radius:50%;cursor:pointer;
+  border:1px solid rgba(255,255,255,.24);transition:.15s}
+.sw:hover{transform:scale(1.12)}
+.sw.active{border:2px solid #fff;box-shadow:0 0 10px rgba(255,255,255,.35)}
+input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:3px;border-radius:2px;
+  background:rgba(255,255,255,.12);outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;
+  border-radius:50%;background:#F7E8BE;border:1px solid #B99248;cursor:pointer}
+.val{font-size:11px;font-weight:700;color:var(--gold);width:18px;text-align:right}
+
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:10px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:6px}
+.act{height:32px;border-radius:9px;cursor:pointer;font-size:11px;color:#C6CBD5;
+  background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07);transition:.16s}
+.act:hover{background:rgba(232,200,122,.13);color:#F4E5BC;border-color:rgba(232,200,122,.38)}
+.act:disabled{color:#494E58;background:rgba(255,255,255,.02);cursor:default}
+.hint{margin-top:10px;font-size:10px;color:#B8BEC9;line-height:1.5;min-height:15px}
+.rule{height:1px;background:rgba(255,255,255,.06);margin:10px 0 8px}
+.meta{font-size:9px;color:#5C626E;line-height:1.65}
+.author{font-size:9px;color:#656B77;margin-top:4px}
+
+/* 弹层 */
+.overlay{position:fixed;inset:0;z-index:20;display:none;align-items:center;
+  justify-content:center;padding:20px;background:rgba(4,5,8,.62);backdrop-filter:blur(6px)}
+.overlay.show{display:flex}
+.modal{width:min(460px,100%);max-height:82vh;overflow:auto;border-radius:18px;padding:20px;
+  background:linear-gradient(150deg,rgba(22,24,31,.99),rgba(9,10,14,.99));
+  border:1px solid var(--gold-line);box-shadow:0 30px 80px rgba(0,0,0,.7)}
+.modal h3{margin:0;font-size:15px;font-weight:700;color:#F4E7C6;letter-spacing:1px}
+.modal .m-sub{font-size:9px;color:var(--dim);margin-top:3px}
+.m-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}
+.m-head .grow{flex:1}
+.m-close{width:22px;height:22px;border-radius:50%;border:none;cursor:pointer;
+  background:rgba(255,255,255,.06);color:#9AA0AC;font-size:13px;line-height:1}
+.m-close:hover{background:rgba(255,255,255,.14);color:#fff}
+.m-sep{height:1px;background:rgba(255,255,255,.07);margin:0 0 12px}
+.modal p{font-size:11px;color:#B7BDC8;line-height:1.75;margin:0 0 10px}
+.modal p b{color:var(--gold);font-weight:700}
+.term{border-left:2px solid rgba(232,200,122,.45);padding-left:10px;margin:0 0 12px}
+.term .t-name{font-size:11px;color:var(--gold);font-weight:700}
+.term .t-desc{font-size:10px;color:#A9B0BC;line-height:1.7;margin-top:3px}
+.m-row{display:flex;gap:8px;margin-top:12px}
+.m-row .act{flex:1;height:34px}
+.info-line{display:flex;justify-content:space-between;gap:12px;font-size:10px;
+  padding:5px 0;border-bottom:1px solid rgba(255,255,255,.045)}
+.info-line span:first-child{color:#7E8490}
+.info-line span:last-child{color:#DDE1E8;text-align:right;word-break:break-all}
+
+/* 存档 */
+.arch{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.arch-item{border-radius:12px;overflow:hidden;background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.07)}
+.arch-item img{display:block;width:100%;height:86px;object-fit:cover;background:#000}
+.arch-info{padding:7px 8px}
+.arch-time{font-size:9px;color:#9199A6}
+.arch-btns{display:flex;gap:5px;margin-top:6px}
+.arch-btns button{flex:1;height:24px;border-radius:6px;font-size:9px;cursor:pointer;
+  border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.05);color:#C6CBD5}
+.arch-btns button:hover{background:rgba(232,200,122,.14);color:#F4E5BC}
+.arch-empty{grid-column:1/-1;text-align:center;font-size:10px;color:#6E7480;padding:26px 0}
+
+/* 文字输入 */
+.text-input{width:100%;height:76px;border-radius:10px;resize:none;padding:9px 11px;
+  font-size:12px;color:#EDEDF0;background:rgba(255,255,255,.05);
+  border:1px solid rgba(232,200,122,.3);outline:none;font-family:inherit}
+.text-input:focus{border-color:rgba(232,200,122,.7)}
+
+/* 移动端 / 平板 */
+@media (max-width:860px){
+  .brand{left:10px;top:10px;padding:7px 12px}
+  .brand-title{font-size:13px}
+  .panel{left:10px;right:10px;top:auto;bottom:10px;width:calc(100vw - 20px);
+    max-width:calc(100vw - 20px);padding:11px 12px 14px;border-radius:16px 16px 0 0;
+    overflow-x:hidden}
+  .tools{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+  .tool{height:42px;min-width:0}
+  .tool span{font-size:9px}
+  .colors{justify-content:space-between;gap:4px;flex-wrap:wrap}
+  .sw{width:17px;height:17px;flex:0 0 auto}
+  .grid4 .act,.grid3 .act{height:30px;font-size:10px;min-width:0}
+  .hint,.meta,.author,.rule{display:none}
+  .brand-sub{display:none}
+  .arch{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-height:520px){
+  .panel .p-body{max-height:190px;overflow:auto}
+}
+</style>
+</head>
+<body>
+<canvas id="board"></canvas>
+
+<div class="brand">
+  <div class="brand-dot"></div>
+  <div>
+    <div class="brand-title">鼠标画笔</div>
+    <div class="brand-sub">ScreenPen Web · 浏览器演示版</div>
+  </div>
+</div>
+
+<aside class="panel" id="panel">
+  <div class="p-head">
+    <span class="p-title">控 制 台</span>
+    <span class="p-mode" id="modePill">自由绘制</span>
+    <button class="icon-btn" id="btnHelp" title="使用说明与名词解释">?</button>
+    <button class="fold" id="btnFold" title="收起 / 展开">—</button>
+  </div>
+  <div class="p-body" id="pBody">
+    <div class="tools" id="tools"></div>
+    <div class="row">
+      <span class="label">颜 色</span>
+      <div class="colors" id="colors"></div>
+    </div>
+    <div class="row">
+      <span class="label">笔 宽</span>
+      <input type="range" id="width" min="1" max="40" value="4">
+      <span class="val" id="widthVal">4</span>
+    </div>
+    <div class="grid4">
+      <button class="act" id="btnUndo">撤销</button>
+      <button class="act" id="btnRedo">重做</button>
+      <button class="act" id="btnClear">清空</button>
+      <button class="act" id="btnSave">导出</button>
+    </div>
+    <div class="grid3">
+      <button class="act" id="btnArch">存档</button>
+      <button class="act" id="btnTerms">术语</button>
+      <button class="act" id="btnAbout">关于</button>
+    </div>
+    <div class="hint" id="hint">快捷键 1-8 切换工具 · Ctrl+Z 撤销 · Ctrl+S 导出</div>
+    <div class="rule"></div>
+    <div class="meta" id="meta"></div>
+    <div class="author">军哥懂保 · 微信 xunijiayuan</div>
+  </div>
+</aside>
+
+<div class="overlay" id="overlay"></div>
+
+<script>
+(function(){
+"use strict";
+
+var AUTHOR = "军哥懂保", WECHAT = "xunijiayuan", VERSION = "1.0.0";
+var BUILD_DATE = "2026-10-26";
+
+var TOOLS = [
+  {key:"pen", name:"画笔", tip:"自由书写"},
+  {key:"hl", name:"荧光", tip:"半透明高亮"},
+  {key:"line", name:"直线", tip:"拖拽画直线"},
+  {key:"arrow", name:"箭头", tip:"指示方向"},
+  {key:"rect", name:"矩形", tip:"框选重点"},
+  {key:"ellipse", name:"椭圆", tip:"圈出重点"},
+  {key:"text", name:"文字", tip:"点击输入文字"},
+  {key:"eraser", name:"橡皮", tip:"只擦笔迹"}
+];
+var COLORS = ["#E8C87A","#FF4D5E","#FF9F45","#3DDC97","#38E1E8","#4C8DFF","#B57BFF","#FFFFFF"];
+var FREE = {pen:1, hl:1, eraser:1};
+var SHAPE = {line:1, arrow:1, rect:1, ellipse:1};
+var ICONS = {
+  pen:'<path d="M4 20l3.2-.6 10.6-10.6a2.1 2.1 0 0 0-3-3L4.2 16.4 4 20z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
+  hl:'<path d="M5 18l9-9" stroke="currentColor" stroke-width="6" stroke-linecap="round" opacity=".45"/><path d="M6 19l9-9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  line:'<path d="M4 19L19 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  arrow:'<path d="M4 19L19 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M12 5h7v7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+  rect:'<rect x="4" y="6.5" width="16" height="11" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/>',
+  ellipse:'<ellipse cx="12" cy="12" rx="8" ry="5.5" fill="none" stroke="currentColor" stroke-width="1.7"/>',
+  text:'<path d="M6 6h12M12 6v12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>',
+  eraser:'<path d="M7 16l6-6 5 4-4 4.6H9L7 16z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M6 19h13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>'
+};
+
+var TERMS = [
+  ["自由绘制", "不限制你在哪画，网页整块区域都是画布；手机上用手指，电脑上用鼠标。"],
+  ["荧光笔", "半透明的粗线，像马克笔划线，下面的背景还能看见。"],
+  ["橡皮", "只擦掉你自己画的笔迹，不会破坏页面上的其他内容。"],
+  ["撤销 / 重做", "撤销退回上一笔，重做再往前一步，每一步程序都会记住。"],
+  ["导出 PNG", "把整块画布另存为一张透明背景的图片，可以贴进文档或课件。"],
+  ["存档", "把当前画作记在浏览器本地，下次打开还能恢复；不上传任何服务器。"],
+  ["预留接口", "程序开放 window.ScreenPenDemo 对象，其他网页或脚本可以直接调用它的画笔功能。"],
+  ["三端自适应", "电脑、平板、手机打开同一个页面，布局与操作都会自动适配。"]
+];
+
+/* ------------------------------------------------ 状态 */
+var state = {
+  tool:"pen", color:"#E8C87A", width:4,
+  strokes:[], redo:[], drawing:false, cur:null,
+  textPos:null, seq:1
+};
+var canvas = document.getElementById("board");
+var ctx = canvas.getContext("2d");
+var dpr = window.devicePixelRatio || 1;
+var W = 0, H = 0;
+
+function cssWidth(){ return W; }
+function cssHeight(){ return H; }
+
+function setupCanvas(){
+  dpr = window.devicePixelRatio || 1;
+  W = Math.max(1, window.innerWidth);
+  H = Math.max(1, window.innerHeight);
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  canvas.style.width = W + "px";
+  canvas.style.height = H + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  redrawAll();
+}
+
+/* ------------------------------------------------ 绘制 */
+function norm(e){
+  var r = canvas.getBoundingClientRect();
+  var x = (e.clientX - r.left) / r.width;
+  var y = (e.clientY - r.top) / r.height;
+  return [Math.min(1, Math.max(0, x)), Math.min(1, Math.max(0, y))];
+}
+
+function px(p){ return [p[0] * W, p[1] * H]; }
+
+function styleFor(s, target){
+  if (s.tool === "eraser"){
+    target.globalCompositeOperation = "destination-out";
+    target.globalAlpha = 1;
+    target.strokeStyle = "#000";
+    target.lineWidth = Math.max(6, s.width * 2);
+  } else if (s.tool === "hl"){
+    target.globalCompositeOperation = "source-over";
+    target.globalAlpha = 0.34;
+    target.strokeStyle = s.color;
+    target.lineWidth = Math.max(6, s.width * 3.6);
+  } else {
+    target.globalCompositeOperation = "source-over";
+    target.globalAlpha = 1;
+    target.strokeStyle = s.color;
+    target.lineWidth = Math.max(1, s.width);
+  }
+  target.lineCap = "round";
+  target.lineJoin = "round";
+}
+
+function drawArrow(x1, y1, x2, y2, s, target){
+  var dx = x2 - x1, dy = y2 - y1;
+  var len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1) return;
+  var head = Math.min(Math.max(14, s.width * 5), len * 0.45);
+  var ang = Math.atan2(dy, dx);
+  target.save();
+  target.globalCompositeOperation = "source-over";
+  target.globalAlpha = 1;
+  target.strokeStyle = s.color;
+  target.fillStyle = s.color;
+  target.lineWidth = Math.max(1, s.width);
+  target.lineCap = "round";
+  target.beginPath();
+  target.moveTo(x1, y1);
+  target.lineTo(x2, y2);
+  target.stroke();
+  target.beginPath();
+  target.moveTo(x2, y2);
+  target.lineTo(x2 - head * Math.cos(ang - 0.42), y2 - head * Math.sin(ang - 0.42));
+  target.lineTo(x2 - head * Math.cos(ang + 0.42), y2 - head * Math.sin(ang + 0.42));
+  target.closePath();
+  target.fill();
+  target.restore();
+}
+
+function drawStroke(s, target){
+  target = target || ctx;
+  var pts = s.pts.map(px);
+  if (!pts.length) return;
+  target.save();
+  styleFor(s, target);
+  if (s.tool === "text"){
+    target.globalCompositeOperation = "source-over";
+    target.globalAlpha = 1;
+    target.fillStyle = s.color;
+    var size = Math.max(16, Math.round(s.width * 6));
+    target.font = "bold " + size + 'px "Microsoft YaHei","PingFang SC",sans-serif';
+    target.textBaseline = "top";
+    target.fillText(s.text || "", pts[0][0], pts[0][1]);
+  } else if (FREE[s.tool]){
+    if (pts.length === 1){
+      target.beginPath();
+      target.arc(pts[0][0], pts[0][1], Math.max(1, target.lineWidth / 2), 0, Math.PI * 2);
+      target.fillStyle = s.tool === "eraser" ? "#000" : s.color;
+      if (s.tool === "eraser"){
+        target.globalCompositeOperation = "destination-out";
+        target.fillStyle = "rgba(0,0,0,1)";
+      }
+      target.fill();
+    } else {
+      target.beginPath();
+      target.moveTo(pts[0][0], pts[0][1]);
+      for (var i = 1; i < pts.length; i++) target.lineTo(pts[i][0], pts[i][1]);
+      target.stroke();
+    }
+  } else if (s.tool === "line"){
+    target.beginPath();
+    target.moveTo(pts[0][0], pts[0][1]);
+    target.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]);
+    target.stroke();
+  } else if (s.tool === "rect"){
+    var r1 = pts[0], r2 = pts[pts.length - 1];
+    target.strokeRect(Math.min(r1[0], r2[0]), Math.min(r1[1], r2[1]),
+                      Math.abs(r2[0] - r1[0]), Math.abs(r2[1] - r1[1]));
+  } else if (s.tool === "ellipse"){
+    var e1 = pts[0], e2 = pts[pts.length - 1];
+    var cx = (e1[0] + e2[0]) / 2, cy = (e1[1] + e2[1]) / 2;
+    target.beginPath();
+    target.ellipse(cx, cy, Math.abs(e2[0] - e1[0]) / 2, Math.abs(e2[1] - e1[1]) / 2,
+                   0, 0, Math.PI * 2);
+    target.stroke();
+  } else if (s.tool === "arrow"){
+    var a1 = pts[0], a2 = pts[pts.length - 1];
+    target.restore();
+    drawArrow(a1[0], a1[1], a2[0], a2[1], s, target);
+    return;
+  }
+  target.restore();
+}
+
+function redrawAll(){
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  for (var i = 0; i < state.strokes.length; i++) drawStroke(state.strokes[i], ctx);
+  if (state.cur && SHAPE[state.cur.tool]) drawStroke(state.cur, ctx);
+}
+
+/* ------------------------------------------------ 指针事件 */
+function onDown(e){
+  if (e.button !== undefined && e.button !== 0) return;
+  var p = norm(e);
+  if (state.tool === "text"){
+    state.textPos = p;
+    openTextDialog();
+    return;
+  }
+  state.drawing = true;
+  state.cur = {tool:state.tool, color:state.color, width:state.width, pts:[p], text:""};
+  canvas.setPointerCapture && canvas.setPointerCapture(e.pointerId);
+  if (FREE[state.tool]) drawStroke(state.cur, ctx);
+  else redrawAll();
+  setHint(toolName(state.tool) + " · 按住拖动");
+}
+
+function onMove(e){
+  if (!state.drawing || !state.cur) return;
+  var p = norm(e);
+  var cur = state.cur;
+  if (FREE[cur.tool]){
+    var last = cur.pts[cur.pts.length - 1];
+    var dx = (p[0] - last[0]) * W, dy = (p[1] - last[1]) * H;
+    if (Math.sqrt(dx * dx + dy * dy) < 1.5) return;
+    cur.pts.push(p);
+    var a = px(last), b = px(p);
+    ctx.save();
+    styleFor(cur, ctx);
+    ctx.beginPath();
+    ctx.moveTo(a[0], a[1]);
+    ctx.lineTo(b[0], b[1]);
+    ctx.stroke();
+    ctx.restore();
+  } else {
+    cur.pts = [cur.pts[0], p];
+    redrawAll();
+  }
+}
+
+function onUp(e){
+  if (!state.drawing || !state.cur) {
+    state.drawing = false;
+    return;
+  }
+  state.drawing = false;
+  var cur = state.cur;
+  state.cur = null;
+  if (cur.pts.length < 2 && !FREE[cur.tool]) {
+    redrawAll();
+    return;
+  }
+  state.strokes.push(cur);
+  state.redo = [];
+  redrawAll();
+  refresh();
+  setHint("已添加一笔 · 共 " + state.strokes.length + " 笔");
+}
+
+canvas.addEventListener("pointerdown", onDown);
+canvas.addEventListener("pointermove", onMove);
+canvas.addEventListener("pointerup", onUp);
+canvas.addEventListener("pointercancel", onUp);
+canvas.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+
+/* ------------------------------------------------ 面板 */
+var toolsBox = document.getElementById("tools");
+var colorsBox = document.getElementById("colors");
+
+TOOLS.forEach(function(t, i){
+  var btn = document.createElement("button");
+  btn.className = "tool" + (i === 0 ? " active" : "");
+  btn.title = "快捷键 " + (i + 1) + " · " + t.tip;
+  btn.innerHTML = '<svg viewBox="0 0 24 24">' + ICONS[t.key] + '</svg><span>' + t.name + '</span>';
+  btn.addEventListener("click", function(){ setTool(t.key); });
+  toolsBox.appendChild(btn);
+  t.el = btn;
+});
+
+COLORS.forEach(function(c, i){
+  var sw = document.createElement("div");
+  sw.className = "sw" + (i === 0 ? " active" : "");
+  sw.style.background = c;
+  sw.title = c;
+  sw.addEventListener("click", function(){ setColor(c); });
+  colorsBox.appendChild(sw);
+  sw.dataset.color = c;
+});
+
+function setTool(key){
+  state.tool = key;
+  TOOLS.forEach(function(t){ t.el.classList.toggle("active", t.key === key); });
+  var mode = document.getElementById("modePill");
+  mode.textContent = toolName(key) + "中";
+  refresh();
+  setHint("已选择 " + toolName(key) + "：" + (TOOLS.filter(function(t){return t.key===key;})[0] || {}).tip);
+}
+function toolName(key){
+  for (var i = 0; i < TOOLS.length; i++) if (TOOLS[i].key === key) return TOOLS[i].name;
+  return key;
+}
+function setColor(c){
+  state.color = c;
+  Array.prototype.forEach.call(colorsBox.children, function(el){
+    el.classList.toggle("active", el.dataset.color === c);
+  });
+}
+function setWidth(v){
+  v = Math.max(1, Math.min(40, parseInt(v, 10) || 1));
+  state.width = v;
+  document.getElementById("width").value = v;
+  document.getElementById("widthVal").textContent = v;
+}
+
+function refresh(){
+  document.getElementById("btnUndo").disabled = state.strokes.length === 0;
+  document.getElementById("btnRedo").disabled = state.redo.length === 0;
+}
+function setHint(text){ document.getElementById("hint").textContent = text; }
+
+document.getElementById("width").addEventListener("input", function(e){
+  setWidth(e.target.value);
+});
+document.getElementById("btnFold").addEventListener("click", function(){
+  document.getElementById("panel").classList.toggle("collapsed");
+});
+
+/* ------------------------------------------------ 动作 */
+function undo(){
+  if (!state.strokes.length){ setHint("没有可以撤销的笔迹"); return; }
+  state.redo.push(state.strokes.pop());
+  redrawAll(); refresh(); setHint("已撤销一步");
+}
+function redo(){
+  if (!state.redo.length){ setHint("没有可以重做的笔迹"); return; }
+  state.strokes.push(state.redo.pop());
+  redrawAll(); refresh(); setHint("已重做一步");
+}
+function clearAll(){
+  if (!state.strokes.length){ setHint("画布已经是空的"); return; }
+  state.strokes = []; state.redo = []; state.cur = null;
+  redrawAll(); refresh(); setHint("画布已清空");
+}
+function timeStamp(){
+  var d = new Date(), p = function(n){ return (n < 10 ? "0" : "") + n; };
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "_" +
+         p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+}
+function exportPNG(){
+  var tmp = document.createElement("canvas");
+  tmp.width = canvas.width; tmp.height = canvas.height;
+  var tctx = tmp.getContext("2d");
+  tctx.drawImage(canvas, 0, 0);
+  var a = document.createElement("a");
+  a.download = "鼠标画笔_" + timeStamp() + ".png";
+  a.href = tmp.toDataURL("image/png");
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  saveArchive(true);
+  setHint("已导出 PNG，并自动存入存档");
+}
+
+document.getElementById("btnUndo").addEventListener("click", undo);
+document.getElementById("btnRedo").addEventListener("click", redo);
+document.getElementById("btnClear").addEventListener("click", clearAll);
+document.getElementById("btnSave").addEventListener("click", exportPNG);
+document.getElementById("btnArch").addEventListener("click", openArchive);
+document.getElementById("btnTerms").addEventListener("click", openTerms);
+document.getElementById("btnAbout").addEventListener("click", openAbout);
+document.getElementById("btnHelp").addEventListener("click", openHelp);
+
+/* ------------------------------------------------ 弹层 */
+var overlay = document.getElementById("overlay");
+function closeOverlay(){ overlay.classList.remove("show"); overlay.innerHTML = ""; }
+overlay.addEventListener("click", function(e){ if (e.target === overlay) closeOverlay(); });
+
+function showModal(html, bind){
+  overlay.innerHTML = '<div class="modal">' + html + '</div>';
+  overlay.classList.add("show");
+  var close = overlay.querySelector(".m-close");
+  if (close) close.addEventListener("click", closeOverlay);
+  if (bind) bind(overlay.querySelector(".modal"));
+}
+
+function headHTML(title, sub, extra){
+  return '<div class="m-head"><div class="grow"><h3>' + title + '</h3>' +
+    (sub ? '<div class="m-sub">' + sub + '</div>' : '') + '</div>' +
+    (extra || '') + '<button class="m-close">×</button></div><div class="m-sep"></div>';
+}
+
+function openHelp(){
+  var html = headHTML("使用说明", "照着做就能上手",
+      '<button class="icon-btn" id="helpTerms" style="margin:0 6px 0 0">?</button>') +
+    '<p><b>一分钟上手</b></p>' +
+    '<p>1. 整块页面就是画布，按住鼠标左键拖动即可写字或画线。<br>' +
+    '2. 右侧（手机为底部）选择工具、颜色和笔宽。<br>' +
+    '3. 画错了点“撤销”；想全部重来点“清空”；要留证据点“导出”。</p>' +
+    '<p><b>工具说明</b></p>' +
+    '<p>画笔、荧光笔、直线、箭头、矩形、椭圆、文字、橡皮。文字工具是点击画布后输入内容。<br>' +
+    '橡皮只擦除笔迹，不会破坏背景。</p>' +
+    '<p><b>快捷键</b></p>' +
+    '<p>数字键 1-8 切换工具　Ctrl+Z 撤销　Ctrl+Y 重做　Ctrl+S 导出<br>' +
+    'Esc 关闭弹窗</p>' +
+    '<p><b>存档</b></p>' +
+    '<p>画作保存在浏览器本地（localStorage），不上传服务器。换浏览器或清理缓存会丢失。</p>' +
+    '<div class="m-row"><button class="act" id="helpOkay">开始使用</button></div>';
+  showModal(html, function(box){
+    box.querySelector(".m-close").addEventListener("click", closeOverlay);
+    box.querySelector("#helpOkay").addEventListener("click", closeOverlay);
+    box.querySelector("#helpTerms").addEventListener("click", openTerms);
+  });
+}
+
+function openTerms(){
+  var html = headHTML("名词解释", "全部用大白话讲清楚") ;
+  TERMS.forEach(function(t){
+    html += '<div class="term"><div class="t-name">' + t[0] + '</div>' +
+            '<div class="t-desc">' + t[1] + '</div></div>';
+  });
+  html += '<div class="m-row"><button class="act" id="termOkay">知道了</button></div>';
+  showModal(html, function(box){
+    box.querySelector(".m-close").addEventListener("click", closeOverlay);
+    box.querySelector("#termOkay").addEventListener("click", closeOverlay);
+  });
+}
+
+function openAbout(){
+  var size = 0;
+  try { size = new Blob([document.documentElement.outerHTML]).size; } catch(e){}
+  var html = headHTML("关于 鼠标画笔", "作者信息与程序状态") +
+    '<div class="info-line"><span>程序名称</span><span>鼠标画笔 · ScreenPen Web</span></div>' +
+    '<div class="info-line"><span>当前版本</span><span>v' + VERSION + '</span></div>' +
+    '<div class="info-line"><span>页面体积</span><span>' + fmtSize(size) + '（估算）</span></div>' +
+    '<div class="info-line"><span>最后修改</span><span>' + BUILD_DATE + '</span></div>' +
+    '<div class="info-line"><span>作者</span><span>' + AUTHOR + '</span></div>' +
+    '<div class="info-line"><span>微信</span><span>' + WECHAT + '</span></div>' +
+    '<div class="info-line"><span>当前笔迹</span><span>' + state.strokes.length + ' 笔</span></div>' +
+    '<div class="info-line"><span>存档记录</span><span>' + loadArchives().length + ' 条</span></div>' +
+    '<div class="info-line"><span>预留接口</span><span>window.ScreenPenDemo</span></div>' +
+    '<p style="margin-top:12px;font-size:10px;color:#6E7480">本页面为纯前端程序，' +
+    '不联网、不上传任何画面，所有数据保存在本机浏览器。</p>' +
+    '<div class="m-row"><button class="act" id="aboutTerms">名词解释</button>' +
+    '<button class="act" id="aboutOkay">关闭</button></div>';
+  showModal(html, function(box){
+    box.querySelector(".m-close").addEventListener("click", closeOverlay);
+    box.querySelector("#aboutOkay").addEventListener("click", closeOverlay);
+    box.querySelector("#aboutTerms").addEventListener("click", openTerms);
+  });
+}
+
+/* ------------------------------------------------ 文字输入 */
+function openTextDialog(){
+  var html = headHTML("添加文字标注", "输入后点击确定放置到画布") +
+    '<textarea class="text-input" id="textValue" placeholder="例如：这里需要注意！"></textarea>' +
+    '<div class="m-row"><button class="act" id="textCancel">取消</button>' +
+    '<button class="act" id="textOkay">确定</button></div>';
+  showModal(html, function(box){
+    var ta = box.querySelector("#textValue");
+    setTimeout(function(){ ta.focus(); }, 60);
+    box.querySelector(".m-close").addEventListener("click", function(){ state.textPos = null; closeOverlay(); });
+    box.querySelector("#textCancel").addEventListener("click", function(){ state.textPos = null; closeOverlay(); });
+    box.querySelector("#textOkay").addEventListener("click", function(){
+      var val = (ta.value || "").trim();
+      if (!val || !state.textPos){ closeOverlay(); return; }
+      state.strokes.push({tool:"text", color:state.color, width:state.width,
+                          pts:[state.textPos], text:val});
+      state.textPos = null;
+      state.redo = [];
+      redrawAll(); refresh(); closeOverlay();
+      setHint("已添加文字标注");
+    });
+    ta.addEventListener("keydown", function(e){
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)){
+        box.querySelector("#textOkay").click();
+      }
+    });
+  });
+}
+
+/* ------------------------------------------------ 存档 */
+var ARCHIVE_KEY = "screenpen_web_archives_v1";
+function loadArchives(){
+  try {
+    var raw = localStorage.getItem(ARCHIVE_KEY);
+    var list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list : [];
+  } catch(e){ return []; }
+}
+function persistArchives(list){
+  try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(list.slice(0, 20))); } catch(e){}
+}
+function makeThumb(){
+  var tmp = document.createElement("canvas");
+  var tw = 220, th = Math.max(1, Math.round(tw * H / W));
+  tmp.width = tw; tmp.height = th;
+  var tctx = tmp.getContext("2d");
+  tctx.fillStyle = "#0A0B0F";
+  tctx.fillRect(0, 0, tw, th);
+  tctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, tw, th);
+  return tmp.toDataURL("image/jpeg", 0.62);
+}
+function saveArchive(silent){
+  if (!state.strokes.length) {
+    if (!silent) setHint("画布是空的，先画点内容再存档");
+    return;
+  }
+  var list = loadArchives();
+  list.unshift({
+    id: "a" + Date.now(),
+    time: new Date().toLocaleString("zh-CN", {hour12:false}),
+    thumb: makeThumb(),
+    strokes: JSON.parse(JSON.stringify(state.strokes)),
+    w: W, h: H
+  });
+  persistArchives(list);
+  if (!silent) setHint("已存入存档（共 " + list.length + " 条）");
+}
+function openArchive(){
+  var list = loadArchives();
+  var html = headHTML("画作存档", "保存在本机浏览器，可随时恢复") +
+    '<div class="arch" id="archGrid"></div>' +
+    '<div class="m-row"><button class="act" id="archSave">保存当前画作</button>' +
+    '<button class="act" id="archClose">关闭</button></div>';
+  showModal(html, function(box){
+    var grid = box.querySelector("#archGrid");
+    if (!list.length){
+      grid.innerHTML = '<div class="arch-empty">还没有存档。画好内容后点“保存当前画作”。</div>';
+    } else {
+      list.forEach(function(item, idx){
+        var div = document.createElement("div");
+        div.className = "arch-item";
+        div.innerHTML = '<img src="' + item.thumb + '" alt="缩略图">' +
+          '<div class="arch-info"><div class="arch-time">' + item.time + '</div>' +
+          '<div class="arch-btns"><button data-act="load" data-i="' + idx + '">恢复</button>' +
+          '<button data-act="del" data-i="' + idx + '">删除</button></div></div>';
+        grid.appendChild(div);
+      });
+    }
+    box.querySelector(".m-close").addEventListener("click", closeOverlay);
+    box.querySelector("#archClose").addEventListener("click", closeOverlay);
+    box.querySelector("#archSave").addEventListener("click", function(){
+      saveArchive(false);
+      closeOverlay();
+    });
+    grid.addEventListener("click", function(e){
+      var btn = e.target.closest ? e.target.closest("button[data-act]") : null;
+      if (!btn) return;
+      var idx = parseInt(btn.dataset.i, 10);
+      var now = loadArchives();
+      if (btn.dataset.act === "load" && now[idx]){
+        state.strokes = JSON.parse(JSON.stringify(now[idx].strokes));
+        state.redo = []; state.cur = null;
+        redrawAll(); refresh(); closeOverlay();
+        setHint("已恢复存档：" + now[idx].time);
+      } else if (btn.dataset.act === "del"){
+        now.splice(idx, 1);
+        persistArchives(now);
+        closeOverlay();
+        openArchive();
+        setHint("已删除一条存档");
+      }
+    });
+  });
+}
+
+function fmtSize(bytes){
+  if (!bytes) return "未知";
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / 1048576).toFixed(2) + " MB";
+}
+
+/* ------------------------------------------------ 信息栏 */
+function initMeta(){
+  var size = 0;
+  try { size = new Blob([document.documentElement.outerHTML]).size; } catch(e){}
+  document.getElementById("meta").innerHTML =
+    "页面体积 " + fmtSize(size) + " · 最后修改 " + BUILD_DATE + "<br>" +
+    "当前版本 v" + VERSION + " · 共 " + TOOLS.length + " 个工具";
+}
+
+/* ------------------------------------------------ 键盘 */
+document.addEventListener("keydown", function(e){
+  if (overlay.classList.contains("show")){
+    if (e.key === "Escape") closeOverlay();
+    return;
+  }
+  var key = e.key;
+  if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === "z"){ e.preventDefault(); undo(); return; }
+  if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === "y"){ e.preventDefault(); redo(); return; }
+  if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === "s"){ e.preventDefault(); exportPNG(); return; }
+  if (/^[1-8]$/.test(key)){
+    var idx = parseInt(key, 10) - 1;
+    if (TOOLS[idx]) setTool(TOOLS[idx].key);
+  }
+});
+
+/* ------------------------------------------------ 预留接口 */
+window.ScreenPenDemo = {
+  version: VERSION,
+  setTool: setTool,
+  setColor: setColor,
+  setWidth: setWidth,
+  undo: undo,
+  redo: redo,
+  clear: clearAll,
+  save: exportPNG,
+  archive: saveArchive,
+  getStrokes: function(){ return JSON.parse(JSON.stringify(state.strokes)); },
+  setStrokes: function(list){
+    state.strokes = JSON.parse(JSON.stringify(list || []));
+    state.redo = []; redrawAll(); refresh();
+  },
+  status: function(){
+    return {app:"鼠标画笔", version:VERSION, author:AUTHOR, wechat:WECHAT,
+            tool:state.tool, color:state.color, width:state.width,
+            strokes:state.strokes.length, redo:state.redo.length,
+            width_px:W, height_px:H};
+  }
+};
+
+/* ------------------------------------------------ 启动 */
+window.addEventListener("resize", function(){
+  setupCanvas();
+});
+setupCanvas();
+refresh();
+initMeta();
+setHint("按住鼠标左键开始画 · 快捷键 1-8 切换工具");
+
+})();
+</script>
+</body>
+</html>
