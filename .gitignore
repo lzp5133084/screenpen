@@ -1,0 +1,9 @@
+# 运行时生成文件
+__pycache__/
+*.pyc
+config.json
+history.json
+selftest_result.txt
+
+# 截图存档（本地数据，不入库）
+截图存档/

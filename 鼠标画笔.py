@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QDialog, QVBoxLayout, QHBoxL
                              QGridLayout, QPushButton, QLabel, QSlider, QLineEdit,
                              QListWidget, QListWidgetItem, QFrame, QFileDialog,
                              QInputDialog, QMessageBox, QGraphicsDropShadowEffect,
-                             QTextEdit, QSizePolicy)
+                             QTextEdit, QSizePolicy, QMenu)
 
 APP_NAME = "鼠标画笔"
 APP_EN = "ScreenPen"
@@ -53,6 +53,8 @@ TOOLS = [
 TOOL_MAP = {t[0]: t for t in TOOLS}
 SHAPE_TOOLS = {"line", "arrow", "rect", "ellipse"}
 FREE_TOOLS = {"pen", "hl", "eraser"}
+# 拖拽时实时预览的形状类工具（region = 区域截图，松手即裁剪保存）
+PREVIEW_TOOLS = SHAPE_TOOLS | {"region"}
 
 COLORS = ["#E8C87A", "#FF4D5E", "#FF9F45", "#3DDC97",
           "#38E1E8", "#4C8DFF", "#B57BFF", "#FFFFFF"]
@@ -131,6 +133,54 @@ def make_cross_cursor(color="#E8C87A"):
     p.drawEllipse(QPointF(16, 16), 5, 5)
     p.end()
     return QCursor(pm, 16, 16)
+
+
+def draw_tool_icon(p, key, rect, color):
+    """在 rect 内绘制指定工具的简约线性图标（黑金科技风）。"""
+    c = QColor(color)
+    pen = QPen(c, 1.8, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    x, y, w, h = rect.x(), rect.y(), rect.width(), rect.height()
+    cx, cy = x + w / 2.0, y + h / 2.0
+    u = min(w, h) / 24.0  # 以 24px 为基准的单位长度
+    if key == "pen":  # 斜握的笔
+        p.drawLine(QPointF(cx - 7 * u, cy + 7 * u), QPointF(cx + 5 * u, cy - 5 * u))
+        p.drawLine(QPointF(cx + 5 * u, cy - 5 * u), QPointF(cx + 8 * u, cy - 8 * u))
+        p.setBrush(QBrush(c))
+        p.drawPolygon(QPolygonF([QPointF(cx - 9 * u, cy + 9 * u),
+                                 QPointF(cx - 6.4 * u, cy + 6.4 * u),
+                                 QPointF(cx - 7.6 * u, cy + 5.2 * u)]))
+    elif key == "hl":  # 荧光马克笔
+        p.drawLine(QPointF(cx - 8 * u, cy + 8 * u), QPointF(cx + 3 * u, cy - 3 * u))
+        p.setPen(QPen(c, 3.6, Qt.SolidLine, Qt.RoundCap))
+        p.drawLine(QPointF(cx + 3 * u, cy - 3 * u), QPointF(cx + 8 * u, cy - 8 * u))
+        p.setPen(QPen(c, 1.4))
+        p.drawLine(QPointF(cx - 8 * u, cy + 4.5 * u), QPointF(cx - 4.5 * u, cy + 8 * u))
+    elif key == "line":  # 直线
+        p.drawLine(QPointF(cx - 8 * u, cy + 8 * u), QPointF(cx + 8 * u, cy - 8 * u))
+    elif key == "arrow":  # 箭头
+        p.drawLine(QPointF(cx - 8 * u, cy + 8 * u), QPointF(cx + 7 * u, cy - 7 * u))
+        p.drawLine(QPointF(cx + 7 * u, cy - 7 * u), QPointF(cx + 1.5 * u, cy - 7 * u))
+        p.drawLine(QPointF(cx + 7 * u, cy - 7 * u), QPointF(cx + 7 * u, cy - 1.5 * u))
+    elif key == "rect":  # 矩形
+        p.drawRect(QRectF(cx - 8 * u, cy - 6 * u, 16 * u, 12 * u))
+    elif key == "ellipse":  # 椭圆
+        p.drawEllipse(QRectF(cx - 8 * u, cy - 6 * u, 16 * u, 12 * u))
+    elif key == "text":  # 文字 T
+        p.drawLine(QPointF(cx - 6 * u, cy - 6 * u), QPointF(cx + 6 * u, cy - 6 * u))
+        p.drawLine(QPointF(cx, cy - 6 * u), QPointF(cx, cy + 7 * u))
+        p.drawLine(QPointF(cx - 3.5 * u, cy + 7 * u), QPointF(cx + 3.5 * u, cy + 7 * u))
+    elif key == "eraser":  # 橡皮
+        path = QPainterPath()
+        path.moveTo(cx - 8 * u, cy + 3 * u)
+        path.lineTo(cx + 1 * u, cy - 6 * u)
+        path.lineTo(cx + 8 * u, cy + 1 * u)
+        path.lineTo(cx - 1 * u, cy + 10 * u)
+        path.lineTo(cx - 5 * u, cy + 10 * u)
+        path.closeSubpath()
+        p.drawPath(path)
+        p.drawLine(QPointF(cx - 3 * u, cy - 2 * u), QPointF(cx + 4 * u, cy + 5 * u))
 
 
 # ---------------------------------------------------------------- 配置
@@ -325,6 +375,16 @@ def mini_icon(kind, color="#C9CDD6", size=32):
         p.drawRoundedRect(QRectF(w * 0.26, w * 0.26, w * 0.48, w * 0.48), 2, 2)
         p.drawRect(QRectF(w * 0.38, w * 0.26, w * 0.24, w * 0.16))
         p.drawRect(QRectF(w * 0.36, w * 0.54, w * 0.28, w * 0.20))
+    elif kind == "crop":
+        # 裁剪：虚线框 + 四角标记
+        dashed = QPen(c, 1.5, Qt.DashLine)
+        p.setPen(dashed)
+        p.drawRect(QRectF(w * 0.30, w * 0.30, w * 0.40, w * 0.40))
+        p.setPen(QPen(c, 1.7, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.drawLine(QPointF(w * 0.22, w * 0.34), QPointF(w * 0.22, w * 0.22))
+        p.drawLine(QPointF(w * 0.22, w * 0.22), QPointF(w * 0.34, w * 0.22))
+        p.drawLine(QPointF(w * 0.78, w * 0.66), QPointF(w * 0.78, w * 0.78))
+        p.drawLine(QPointF(w * 0.78, w * 0.78), QPointF(w * 0.66, w * 0.78))
     elif kind == "archive":
         p.drawRoundedRect(QRectF(w * 0.24, w * 0.34, w * 0.52, w * 0.40), 2, 2)
         p.drawLine(QPointF(w * 0.24, w * 0.46), QPointF(w * 0.76, w * 0.46))
@@ -429,7 +489,7 @@ class Board(QWidget):
                 painter.drawEllipse(QPointF(pts[0]), radius, radius)
             for i in range(1, len(pts)):
                 painter.drawLine(pts[i - 1], pts[i])
-        elif tool in SHAPE_TOOLS:
+        elif tool in PREVIEW_TOOLS:
             p1, p2 = pts[0], pts[-1]
             if tool == "line":
                 painter.drawLine(p1, p2)
@@ -439,6 +499,12 @@ class Board(QWidget):
                 painter.drawEllipse(QRect(p1, p2).normalized())
             elif tool == "arrow":
                 self.draw_arrow(painter, p1, p2, pen)
+            elif tool == "region":
+                # 区域截图：金色虚线框 + 角标
+                dashed = QPen(QColor("#E8C87A"), 2, Qt.DashLine)
+                painter.setPen(dashed)
+                painter.setBrush(QBrush(QColor(232, 200, 122, 26)))
+                painter.drawRect(QRect(p1, p2).normalized())
         elif tool == "text":
             text = stroke.get("text", "")
             if text:
@@ -534,7 +600,7 @@ class Board(QWidget):
             self.last_pos = pos
             r = QRect(prev, pos).normalized().adjusted(-20, -20, 20, 20)
             self.update(r)
-        elif tool in SHAPE_TOOLS:
+        elif tool in PREVIEW_TOOLS:
             self.current["points"] = [self.current["points"][0], pos]
             new_rect = self.stroke_bbox(self.current)
             self.update(new_rect.united(self.preview_rect))
@@ -558,6 +624,14 @@ class Board(QWidget):
         stroke = self.current
         self.current = None
         tool = stroke["tool"]
+        self.preview_rect = QRect()
+
+        if tool == "region":
+            # 区域截图：松手即把框内画面（含笔迹）裁剪保存，不在画布留痕
+            r = QRect(stroke["points"][0], stroke["points"][-1]).normalized()
+            self.update()
+            self.ctrl.save_region(r)
+            return
 
         if tool == "text":
             text, ok = QInputDialog.getText(None, "输入文字", "请输入要标注的文字：")
@@ -589,8 +663,12 @@ class Board(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
+        # 关键：Windows 分层窗口（WA_TranslucentBackground）的鼠标命中按像素 alpha 判定，
+        # 全透明像素会"漏"到下层窗口，导致画笔点不到。铺一层 alpha=1 的近透明底，
+        # 肉眼不可见，但保证整屏都能接收鼠标。
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 1))
         painter.drawImage(0, 0, self.image)
-        if self.current is not None and self.current["tool"] in SHAPE_TOOLS:
+        if self.current is not None:
             self.draw_stroke(painter, self.current)
         painter.end()
 
@@ -833,11 +911,16 @@ class Panel(QWidget):
         act.addWidget(self.btn_redo, 0, 1)
         act.addWidget(self.btn_clear, 0, 2)
         act.addWidget(self.btn_save, 0, 3)
-        lay.addLayout(act)
 
-        # 次级操作
-        act2 = QGridLayout()
-        act2.setSpacing(6)
+        self.btn_region = QPushButton("  区域截图")
+        self.btn_region.setObjectName("Act")
+        self.btn_region.setIcon(mini_icon("crop", "#4FD1C5"))
+        self.btn_region.setCursor(Qt.PointingHandCursor)
+        self.btn_region.setToolTip("框选一块区域，只保存框内的画面（含标注）")
+        self.btn_region.clicked.connect(self.ctrl.start_region)
+        act.addWidget(self.btn_region, 1, 0)
+
+        # 次级操作并入同一网格，保持 4×2 整齐排列
         btn_arch = QPushButton("  存档")
         btn_arch.setObjectName("Act")
         btn_arch.setIcon(mini_icon("archive"))
@@ -851,13 +934,13 @@ class Panel(QWidget):
         btn_about.setObjectName("Act")
         btn_about.setCursor(Qt.PointingHandCursor)
         btn_about.clicked.connect(self.ctrl.open_about)
-        act2.addWidget(btn_arch, 0, 0)
-        act2.addWidget(btn_help, 0, 1)
-        act2.addWidget(btn_about, 0, 2)
-        lay.addLayout(act2)
+        act.addWidget(btn_arch, 1, 1)
+        act.addWidget(btn_help, 1, 2)
+        act.addWidget(btn_about, 1, 3)
+        lay.addLayout(act)
 
         # 提示条
-        self.hint = QLabel("快捷键 Ctrl+Alt+D 切换绘画 / 穿透")
+        self.hint = QLabel("F2 开关画笔 · F3 收起/展开界面 · 右键切换绘画/穿透")
         self.hint.setObjectName("Hint")
         self.hint.setWordWrap(True)
         lay.addWidget(self.hint)
@@ -957,6 +1040,106 @@ class Panel(QWidget):
 
 
 # ---------------------------------------------------------------- 悬浮球
+class ToolIconPicker(QWidget):
+    """悬浮球旁弹出的简约图标功能选择盘：4×2 网格，点图标即选工具。"""
+    CELL = 44
+    PAD = 10
+    COLS = 4
+
+    def __init__(self, ball):
+        super(ToolIconPicker, self).__init__(None)
+        self.ball = ball
+        self.ctrl = ball.ctrl
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        rows = (len(TOOLS) + self.COLS - 1) // self.COLS
+        w = self.PAD * 2 + self.COLS * self.CELL
+        h = self.PAD * 2 + rows * self.CELL + 20
+        self.setFixedSize(w, h)
+        self._cells = []
+        for i, (key, name, desc) in enumerate(TOOLS):
+            col = i % self.COLS
+            row = i // self.COLS
+            r = QRect(self.PAD + col * self.CELL, self.PAD + row * self.CELL,
+                      self.CELL, self.CELL)
+            self._cells.append((r, key, name))
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        # 底板：黑金渐变圆角卡片
+        bg = QRectF(0, 0, self.width(), self.height() - 14)
+        grad = QLinearGradient(bg.topLeft(), bg.bottomRight())
+        grad.setColorAt(0, QColor(24, 26, 34, 248))
+        grad.setColorAt(1, QColor(10, 11, 15, 250))
+        path = QPainterPath()
+        path.addRoundedRect(bg, 14, 14)
+        p.fillPath(path, QBrush(grad))
+        p.setPen(QPen(QColor(232, 200, 122, 64), 1.2))
+        p.drawPath(path)
+        # 图标单元格
+        cur = self.ctrl.tool
+        for r, key, name in self._cells:
+            cell = QRectF(r)
+            if key == cur:
+                g = QLinearGradient(cell.topLeft(), cell.bottomRight())
+                g.setColorAt(0, QColor(245, 224, 168))
+                g.setColorAt(1, QColor(214, 174, 86))
+                cp = QPainterPath()
+                cp.addRoundedRect(cell.adjusted(2, 2, -2, -2), 10, 10)
+                p.fillPath(cp, QBrush(g))
+                p.setPen(QPen(QColor(247, 232, 190), 1))
+                p.drawPath(cp)
+                icon_c = "#14161D"
+            else:
+                icon_c = "#E8C87A"
+            inner = cell.adjusted(9, 6, -9, -10)
+            draw_tool_icon(p, key, inner, icon_c)
+            p.setPen(QPen(QColor(icon_c) if key == cur else QColor(158, 164, 176)))
+            f = QFont("Microsoft YaHei", 7)
+            p.setFont(f)
+            p.drawText(QRectF(cell.x(), cell.bottom() - 13, cell.width(), 12),
+                       Qt.AlignHCenter | Qt.AlignVCenter, name)
+        # 底部提示
+        p.setPen(QPen(QColor(110, 116, 128)))
+        p.setFont(QFont("Microsoft YaHei", 7))
+        p.drawText(QRectF(0, self.height() - 15, self.width(), 12),
+                   Qt.AlignHCenter | Qt.AlignVCenter, "点图标选工具 · 右键球体出菜单")
+        p.end()
+
+    def mousePressEvent(self, event):
+        if event.button() != Qt.LeftButton:
+            self.hide()
+            return
+        pos = event.pos()
+        for r, key, name in self._cells:
+            if r.contains(pos):
+                self.ctrl.set_tool(key)
+                self.hide()
+                return
+        self.hide()
+
+    def focusOutEvent(self, event):
+        self.hide()
+        super(ToolIconPicker, self).focusOutEvent(event)
+
+    def popup_near_ball(self):
+        """贴着悬浮球弹出，自动避让屏幕边缘。"""
+        ball = self.ball
+        screen = QApplication.primaryScreen().availableGeometry()
+        x = ball.x() - self.width() - 10
+        if x < screen.left():
+            x = ball.x() + ball.width() + 10
+        if x + self.width() > screen.right():
+            x = screen.right() - self.width() - 4
+        y = ball.y() + ball.height() // 2 - self.height() // 2
+        y = max(screen.top() + 4, min(y, screen.bottom() - self.height() - 4))
+        self.move(x, y)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+
 class DockBall(QWidget):
     def __init__(self, ctrl):
         super(DockBall, self).__init__(None)
@@ -965,9 +1148,10 @@ class DockBall(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setFixedSize(58, 58)
         self.setCursor(Qt.PointingHandCursor)
-        self.setToolTip("单击展开鼠标画笔")
+        self.setToolTip("左键：选择工具（简约图标）\n右键：展开界面 / 退出程序\n拖拽：移动位置")
         self._press = None
         self._moved = False
+        self.picker = None
 
     def paintEvent(self, event):
         p = QPainter(self)
@@ -979,13 +1163,11 @@ class DockBall(QWidget):
         p.setBrush(QBrush(grad))
         p.setPen(QPen(QColor(255, 244, 214, 170), 1.4))
         p.drawEllipse(rect)
-        p.setPen(QPen(QColor(26, 22, 14, 220), 2.2, Qt.SolidLine, Qt.RoundCap))
-        p.drawLine(QPointF(22, 38), QPointF(36, 24))
-        p.setBrush(QColor(26, 22, 14, 220))
-        p.setPen(Qt.NoPen)
-        p.drawPolygon(QPolygonF([QPointF(38, 22), QPointF(42, 22), QPointF(42, 26)]))
+        # 球面显示当前工具的简约图标，功能状态一眼可见
+        draw_tool_icon(p, self.ctrl.tool, QRectF(15, 15, 28, 28), "#1A160E")
         p.end()
 
+    # -------------------------------------------------- 交互
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self._press = event.globalPos()
@@ -995,16 +1177,67 @@ class DockBall(QWidget):
         if self._press is not None and event.buttons() & Qt.LeftButton:
             if (event.globalPos() - self._press).manhattanLength() > 4:
                 self._moved = True
+                self.hide_picker()
             self.move(event.globalPos() - QPoint(29, 29))
 
     def mouseReleaseEvent(self, event):
-        if self._press is None:
+        if event.button() != Qt.LeftButton or self._press is None:
             return
         self._press = None
         if not self._moved:
-            self.ctrl.expand_panel()
+            self.toggle_picker()
         else:
             self.ctrl.save_ball_pos()
+
+    def contextMenuEvent(self, event):
+        self.hide_picker()
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            "QMenu{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,"
+            "stop:0 rgba(24,26,34,250), stop:1 rgba(10,11,15,252));"
+            "color:#E9E9EE; border:1px solid rgba(232,200,122,0.35);"
+            "border-radius:10px; padding:6px; font-family:'Microsoft YaHei'; font-size:12px;}"
+            "QMenu::item{padding:7px 26px 7px 14px; border-radius:7px;}"
+            "QMenu::item:selected{background:rgba(232,200,122,0.20); color:#F4E5BC;}"
+            "QMenu::separator{height:1px; background:rgba(232,200,122,0.18); margin:5px 10px;}")
+        act_expand = menu.addAction("展开控制台界面")
+        act_mode = menu.addAction("切换到穿透模式" if self.ctrl.paint_mode else "切换到绘画模式")
+        menu.addSeparator()
+        act_undo = menu.addAction("撤销上一笔")
+        act_redo = menu.addAction("重做")
+        act_clear = menu.addAction("清空全部笔迹")
+        menu.addSeparator()
+        act_quit = menu.addAction("退出程序")
+        chosen = menu.exec_(event.globalPos())
+        if chosen is act_expand:
+            self.ctrl.expand_panel()
+        elif chosen is act_mode:
+            self.ctrl.toggle_mode()
+        elif chosen is act_undo:
+            self.ctrl.undo()
+        elif chosen is act_redo:
+            self.ctrl.redo()
+        elif chosen is act_clear:
+            self.ctrl.clear_all()
+        elif chosen is act_quit:
+            self.ctrl.quit_app()
+
+    # -------------------------------------------------- 图标选择盘
+    def toggle_picker(self):
+        if self.picker is not None and self.picker.isVisible():
+            self.hide_picker()
+            return
+        if self.picker is None:
+            self.picker = ToolIconPicker(self)
+        self.picker.popup_near_ball()
+
+    def hide_picker(self):
+        if self.picker is not None:
+            self.picker.hide()
+
+    def hideEvent(self, event):
+        self.hide_picker()
+        super(DockBall, self).hideEvent(event)
 
 
 # ---------------------------------------------------------------- 对话框
@@ -1308,6 +1541,8 @@ API_USAGE = {
     "POST /tool": "切换工具，body: {\"name\": \"pen\"}",
     "POST /color": "切换颜色，body: {\"value\": \"#FF4D5E\"}",
     "POST /width": "设置笔宽 1-40，body: {\"value\": 6}",
+    "POST /region": "区域截图，body: {\"x\": 100, \"y\": 100, \"w\": 600, \"h\": 400}",
+    "POST /panel": "显示/收起界面，body: {\"show\": true}；不传则切换",
 }
 
 
@@ -1435,6 +1670,15 @@ class ScreenPen(object):
         self.config.set("collapsed", False)
         self.refresh_ui()
 
+    def toggle_ui(self):
+        """F3：在"控制台面板"和"悬浮球"之间随时切换，防止界面被藏起来后找不到。"""
+        if self.panel is not None and self.panel.isVisible():
+            self.collapse_panel()
+            self.notify("已收起到悬浮球（按 F3 可再展开）")
+        else:
+            self.expand_panel()
+            self.notify("已展开控制台（按 F3 可收起）")
+
     def collapse_panel(self):
         if self.panel is not None:
             self.panel.hide()
@@ -1483,6 +1727,32 @@ class ScreenPen(object):
     def toggle_mode(self):
         self.set_mode(not self.paint_mode)
 
+    def toggle_pen(self):
+        """F2：一键开启/关闭画笔。开启=可直接画，关闭=可正常点击下面的软件。"""
+        self.paint_mode = not self.paint_mode
+        if not self.board.isVisible():
+            self.board.setVisible(True)
+        self.apply_mode()
+        if self.paint_mode:
+            self.notify("画笔已开启（F2 关闭）—— 按住左键即可画")
+        else:
+            self.notify("画笔已关闭（F2 开启）—— 现在可正常点击软件，笔迹保留")
+
+    def start_region(self):
+        """区域截图：进入框选状态，拖出区域松手即裁剪保存。"""
+        if self.tool == "region":
+            return
+        self._tool_before_region = self.tool
+        self._panel_was_visible = self.panel is not None and self.panel.isVisible()
+        self.tool = "region"
+        self.paint_mode = True
+        if not self.board.isVisible():
+            self.board.setVisible(True)
+        self.apply_mode()
+        if self.panel is not None and self.panel.isVisible():
+            self.panel.hide()
+        self.notify("区域截图：按住左键拖出要保存的区域，松手自动保存到存档")
+
     def toggle_visible(self):
         self.board.setVisible(not self.board.isVisible())
         self.notify("笔迹层已显示" if self.board.isVisible() else "笔迹层已隐藏")
@@ -1493,6 +1763,8 @@ class ScreenPen(object):
             return
         self.tool = key
         self.config.set("tool", key)
+        if self.ball is not None:
+            self.ball.update()
         self.refresh_ui()
         self.notify("已选择工具：%s（%s）" % (TOOL_MAP[key][1], TOOL_MAP[key][2]))
 
@@ -1585,9 +1857,11 @@ class ScreenPen(object):
         if board_visible:
             self.board.show()
             self.board.raise_()
-        if panel_visible:
+        if panel_visible or getattr(self, "_panel_was_visible", False):
+            self.ensure_panel()
             self.panel.show()
             self.panel.raise_()
+        self._panel_was_visible = False
         if ball_visible:
             self.ball.show()
             self.ball.raise_()
@@ -1622,6 +1896,67 @@ class ScreenPen(object):
         if not silent:
             self.notify("已保存：%s（点击\"存档\"可查看）" % os.path.basename(path))
             self.refresh_ui()
+        return path
+
+    def save_region(self, rect):
+        """区域截图：只保存框选范围内的画面（桌面 + 笔迹）。"""
+        rect = QRect(rect).normalized()
+        if rect.width() < 12 or rect.height() < 12:
+            self.notify("框选区域太小，请重新拖拽")
+            return None
+
+        board_visible = self.board.isVisible()
+        panel_visible = self.panel is not None and self.panel.isVisible()
+        ball_visible = self.ball is not None and self.ball.isVisible()
+
+        self.board.hide()
+        if panel_visible:
+            self.panel.hide()
+        if ball_visible:
+            self.ball.hide()
+        QApplication.processEvents()
+
+        try:
+            full = self.grab_desktop()
+        except Exception as exc:
+            full = None
+            self.notify("区域截图失败：%s" % exc)
+
+        if board_visible:
+            self.board.show()
+            self.board.raise_()
+        if panel_visible or getattr(self, "_panel_was_visible", False):
+            self.ensure_panel()
+            self.panel.show()
+            self.panel.raise_()
+        self._panel_was_visible = False
+        if ball_visible:
+            self.ball.show()
+            self.ball.raise_()
+        self.apply_mode(save=False)
+
+        if full is None:
+            return None
+
+        crop = full.copy(rect)
+        try:
+            os.makedirs(ARCHIVE_DIR, exist_ok=True)
+        except OSError:
+            pass
+        path = os.path.join(ARCHIVE_DIR, "ScreenPen_区域_%s.png" %
+                            datetime.now().strftime("%Y%m%d_%H%M%S"))
+        if not crop.save(path, "PNG"):
+            self.notify("区域截图保存失败，请检查目录权限")
+            return None
+
+        self.archive.add(path, 0, ["region"])
+        self._refresh_meta()
+        # 用完即退出框选状态，恢复原来的画笔工具
+        self.tool = getattr(self, "_tool_before_region", "pen")
+        self.apply_mode(save=False)
+        self.notify("区域截图已保存：%s（%d×%d）" %
+                    (os.path.basename(path), rect.width(), rect.height()))
+        self.refresh_ui()
         return path
 
     def open_archive_folder(self):
@@ -1676,6 +2011,14 @@ class ScreenPen(object):
             for hid, vk in vk_map.items():
                 if user32.RegisterHotKey(None, hid, mods, vk):
                     self.hotkeys_ok += 1
+            # F2 单键：一键开关画笔（比 Ctrl+Alt 组合更稳，不与输入法冲突）
+            if user32.RegisterHotKey(None, 1020, MOD_NOREPEAT, 0x71):
+                self.hotkey_actions[1020] = self.toggle_pen
+                self.hotkeys_ok += 1
+            # F3 单键：控制台面板 / 悬浮球 互相切换（界面藏了就按它）
+            if user32.RegisterHotKey(None, 1021, MOD_NOREPEAT, 0x72):
+                self.hotkey_actions[1021] = self.toggle_ui
+                self.hotkeys_ok += 1
             QApplication.instance().installNativeEventFilter(self.hotkey_filter)
         except Exception:
             pass
@@ -1797,6 +2140,25 @@ class ScreenPen(object):
             return self.api_status()
         if cmd == "width":
             self.set_width(payload.get("value", self.width))
+            return self.api_status()
+        if cmd == "region":
+            try:
+                x = int(payload.get("x", 0))
+                y = int(payload.get("y", 0))
+                w = int(payload.get("w", 0))
+                h = int(payload.get("h", 0))
+            except (TypeError, ValueError):
+                return {"ok": False, "error": "x/y/w/h 必须为整数"}
+            path = self.save_region(QRect(x, y, w, h))
+            return {"ok": bool(path), "file": path}
+        if cmd == "panel":
+            show = payload.get("show")
+            if show is True:
+                self.expand_panel()
+            elif show is False:
+                self.collapse_panel()
+            else:
+                self.toggle_ui()
             return self.api_status()
         return {"ok": False, "error": "未知命令", "usage": API_USAGE}
 
