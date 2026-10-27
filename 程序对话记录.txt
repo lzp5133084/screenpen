@@ -188,3 +188,27 @@ Board.paintEvent 中先铺一层 alpha=1 的底色（肉眼不可见），
   · F3 切换面板/悬浮球
   · 悬浮球左键=工具图标盘，右键=菜单（展开控制台 / 退出程序）
   · Ctrl+Alt+Q 或悬浮球右键"退出程序"可彻底关闭程序
+
+-----------------------------------------------
+十、上线部署（2026-10-27）
+-----------------------------------------------
+用户要求：上传 GitHub，部署到 ecojia.cn 工具中。
+
+【GitHub：失败（网络原因）】
+· curl api.github.com 连续多次返回 000（TLS 握手失败，耗时 5 秒即断）
+· git ls-remote 报 schannel: SSL/TLS connection failed
+· 尝试 3 个 GitHub IP 直连（20.205.243.168 / 140.82.112.6 / 20.27.177.113）全部 000
+· 本机无代理配置 → 当前网络环境无法访问 GitHub，需代理/VPN 后重试
+
+【Gitee：已推送成功】
+· commit 43e7ba2 修复画笔层鼠标穿透 + 新增区域截图与 F2/F3 快捷键
+· 已推送 ren-junxue/screenpen main
+
+【ecojia.cn：已上线】
+· 服务器 118.24.173.246（ubuntu），/opt/ecojia/tools 可写，SFTP 直传
+· 新目录 /opt/ecojia/tools/screenpen/：index.html（网页演示版 35KB）+ 4 张演示截图
+· 工具平台首页 index.html 已加入 28 号卡片入口（原文件备份 index.html.bak.screenpen）
+· 线上地址：https://tools.ecojia.cn/screenpen/  → HTTP 200
+
+【仓库整理】
+· 新增 .gitignore：排除 __pycache__ / config.json / history.json / selftest_result.txt / 截图存档
