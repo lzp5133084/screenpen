@@ -242,3 +242,33 @@ Board.paintEvent 中先铺一层 alpha=1 的底色（肉眼不可见），
 · 仓库 https://github.com/lzp5133084/screenpen（此前 TLS 阻断已恢复）
 · Release v1.0.0 已上传两个附件（EXE + APK）
 · Gitee 同步推送完成
+
+-----------------------------------------------
+十二、安卓端重做为原生悬浮球版 v1.1.0（2026-10-29）
+-----------------------------------------------
+用户反馈：手机版没有悬浮球，要的是电脑桌面端那种效果。
+
+【结论】
+· v1.0.0 安卓包只是网页套壳（WebView），覆盖不到别的 App，所以没有悬浮球
+· 重写为原生实现：SYSTEM_ALERT_WINDOW 悬浮窗 + 前台服务，覆盖在任意 App 之上
+
+【代码结构 android/src/cn/ecojia/screenpen/】
+· BallView.java   悬浮球，金色描边 + 笔尖图形，可拖动、轻点回调
+· DrawView.java   全屏标注层，画笔/荧光/直线/箭头/矩形/椭圆/橡皮，撤销、清空
+· FloatService.java 前台服务：悬浮球窗口 + 标注窗口 + 顶部工具条（工具、8 色、穿透、撤销、清空、收起、退出）
+· MainActivity.java 授权引导页（悬浮窗权限 → 开启悬浮球），含使用说明与名词解释
+
+【交互与桌面版对齐】
+· 轻点球进入标注；再点球或「收起」退出；工具条「穿透」让标注层不接收触摸，笔迹保留
+· 工具与颜色写入 SharedPreferences，下次打开沿用上次选择
+· 无悬浮窗权限时服务自动退出，不弹崩溃
+
+【构建问题】
+· d8/R8 8.2.2 处理 javac 21 生成的匿名内部类会 NPE（Cannot invoke String.length()）
+· 解决：全部改成具名静态内部类（Click / BallListener），不再使用匿名类；构建恢复
+
+【发布】
+· APK v1.1.0（76.8KB）：/opt/ecojia/tools/screenpen/download/ScreenPen-Android-v1.1.0.apk
+· 页面卡片改为"安卓悬浮球版"，旧 v1.0.0 APK 已从服务器删除
+· GitHub Release v1.1.0 已上传 APK；Gitee 已同步
+· 注意：本机无安卓设备/模拟器连接，未做真机运行验证
