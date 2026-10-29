@@ -212,3 +212,33 @@ Board.paintEvent 中先铺一层 alpha=1 的底色（肉眼不可见），
 
 【仓库整理】
 · 新增 .gitignore：排除 __pycache__ / config.json / history.json / selftest_result.txt / 截图存档
+
+-----------------------------------------------
+十一、补下载入口 + 三端打包（2026-10-29）
+-----------------------------------------------
+用户反馈：页面里看不到 EXE 与 APK 下载链接。
+
+【Windows 版 EXE】
+· PyInstaller 5.13.2 单文件打包：dist/鼠标画笔.exe（42.04MB，免安装）
+· 命令：python -m PyInstaller --onefile --windowed --name 鼠标画笔 鼠标画笔.py
+
+【安卓版 APK（新建）】
+· 方案：自写 WebView 外壳（无 Gradle，直接调 SDK build-tools 34.0.0）
+· 新增 android/ 目录：AndroidManifest.xml、MainActivity.java、res（图标/主题）、build_apk.py
+· 包名 cn.ecojia.screenpen，minSdk 21 / targetSdk 34，横屏全屏，加载内置网页版
+· 签名：android/release.keystore（已 gitignore），APK 76.9KB，apksigner 校验通过
+
+【页面改造】
+· 控制台顶部新增金色下载条：Windows 版（EXE·42MB）/ 安卓版（APK·77KB）
+· 「关于」弹层内也加入下载入口
+· APK 内置页通过 file:// 协议自动隐藏下载条，避免死链
+
+【上线】
+· /opt/ecojia/tools/screenpen/index.html 更新（38128 字节）
+· 新增 /download/ScreenPen-Windows-v1.0.0.exe、ScreenPen-Android-v1.0.0.apk
+· 校验：3 个链接 HEAD 均 200，页面已含两处下载链接（浏览器实测无错乱）
+
+【GitHub：本次成功】
+· 仓库 https://github.com/lzp5133084/screenpen（此前 TLS 阻断已恢复）
+· Release v1.0.0 已上传两个附件（EXE + APK）
+· Gitee 同步推送完成
