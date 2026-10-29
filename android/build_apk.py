@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""构建安卓 WebView 版 APK（不依赖 Gradle，直接调用 Android SDK build-tools）"""
+"""构建安卓悬浮球版 APK（不依赖 Gradle，直接调用 Android SDK build-tools）"""
 import os
 import shutil
 import subprocess
@@ -12,7 +12,7 @@ ANDROID_JAR = os.path.join(SDK, "platforms", "android-34", "android.jar")
 BUILD = os.path.join(ROOT, "android", "build")
 KS = os.path.join(ROOT, "android", "release.keystore")
 PASS = "Lzp520520520"
-OUT = os.path.join(ROOT, "dist", "鼠标画笔_安卓版_v1.0.0.apk")
+OUT = os.path.join(ROOT, "dist", "鼠标画笔_安卓版_v1.1.0.apk")
 
 
 def run(*args):
@@ -28,19 +28,20 @@ def main():
         shutil.rmtree(BUILD)
     os.makedirs(os.path.join(BUILD, "dex"))
     os.makedirs(os.path.join(BUILD, "classes"))
-    os.makedirs(os.path.join(ROOT, "android", "assets"), exist_ok=True)
-    shutil.copy("web_demo.html", os.path.join("android", "assets", "index.html"))
-
     run(os.path.join(BT, "aapt2.exe"), "compile", "--dir", "android/res",
         "-o", os.path.join(BUILD, "res.zip"))
     run(os.path.join(BT, "aapt2.exe"), "link",
         "-o", os.path.join(BUILD, "base.apk"), "-I", ANDROID_JAR,
         "--manifest", "android/AndroidManifest.xml",
-        "-A", "android/assets", os.path.join(BUILD, "res.zip"), "--auto-add-overlay")
+        os.path.join(BUILD, "res.zip"), "--auto-add-overlay")
 
+    sources = []
+    for base, _, files in os.walk(os.path.join("android", "src")):
+        for f in files:
+            if f.endswith(".java"):
+                sources.append(os.path.join(base, f))
     run("javac", "-source", "8", "-target", "8", "-bootclasspath", ANDROID_JAR,
-        "-d", os.path.join(BUILD, "classes"),
-        os.path.join("android", "src", "cn", "ecojia", "screenpen", "MainActivity.java"))
+        "-d", os.path.join(BUILD, "classes"), *sources)
     run("jar", "cf", os.path.join(BUILD, "classes.jar"), "-C", os.path.join(BUILD, "classes"), ".")
     run(os.path.join(BT, "d8.bat"), "--release", "--lib", ANDROID_JAR, "--min-api", "21",
         "--output", os.path.join(BUILD, "dex"), os.path.join(BUILD, "classes.jar"))
